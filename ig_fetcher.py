@@ -78,24 +78,36 @@ def fetch_recent_posts(ig_user_id: str, page_token: str, limit: int = 20) -> lis
 def fetch_post_insights(media_id: str, page_token: str) -> dict:
     """抓取單篇貼文的成效數據"""
     url = f"{GRAPH_BASE}/{media_id}/insights"
+    result = {}
 
-    # IG 貼文支援的 metrics
-    metrics = "impressions,reach,likes,comments,shares,saved,total_interactions"
-
-    params = {
+    # 第一組：reach、likes、comments、shares、saved、total_interactions
+    metrics = "reach,likes,comments,shares,saved,total_interactions"
+    resp = requests.get(url, params={
         "metric": metrics,
         "access_token": page_token,
-    }
-    resp = requests.get(url, params=params, timeout=30)
+    }, timeout=30)
 
-    if resp.status_code != 200:
-        # 部分貼文類型（限時動態等）不支援所有 metrics，回傳空值
-        return {}
+    if resp.status_code == 200:
+        for item in resp.json().get("data", []):
+            values = item.get("values", [])
+            if values:
+                result[item["name"]] = values[0]["value"]
+            else:
+                result[item["name"]] = item.get("total_value", {}).get("value", 0)
 
-    data = resp.json().get("data", [])
-    result = {}
-    for item in data:
-        result[item["name"]] = item["values"][0]["value"] if item.get("values") else 0
+    # 第二組：views（新版 impressions）
+    resp2 = requests.get(url, params={
+        "metric": "views",
+        "access_token": page_token,
+    }, timeout=30)
+    if resp2.status_code == 200:
+        for item in resp2.json().get("data", []):
+            values = item.get("values", [])
+            if values:
+                result["views"] = values[0]["value"]
+            else:
+                result["views"] = item.get("total_value", {}).get("value", 0)
+
     return result
 
 
